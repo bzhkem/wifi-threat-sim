@@ -79,6 +79,34 @@ function prompt_iface(){
     done
 }
 
+function install_deps() {
+    PKGS=(hostapd dnsmasq iw aircrack-ng python3 openssl mitmproxy)
+    MISSING=()
+    for p in "${PKGS[@]}"; do
+        command -v $p >/dev/null 2>&1 || MISSING+=($p)
+    done
+    if [ ${#MISSING[@]} -eq 0 ]; then
+        echo -e "${GREEN}All dependencies are already installed!${NC}"; return;
+    fi
+    echo -e "${YELLOW}You are missing:${NC} ${MISSING[*]}"
+    read -p "Install with your system package manager? [Y/n]: " ans
+    [[ $ans =~ ^[Nn] ]] && echo "Aborted." && return
+    if command -v apt >/dev/null 2>&1; then
+        sudo apt update
+        sudo apt install -y "${MISSING[@]}"
+    elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y "${MISSING[@]}"
+    elif command -v yum >/dev/null 2>&1; then
+        sudo yum install -y "${MISSING[@]}"
+    elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -Sy --noconfirm "${MISSING[@]}"
+    else
+        echo -e "${RED}No supported package manager found (apt, dnf, yum, pacman).${NC}"
+        return 1
+    fi
+    echo -e "${GREEN}Dependencies installation complete.${NC}"
+}
+
 function scan_wifi_interfaces_and_networks() {
     iwlist_out=$(iw dev 2>/dev/null | awk '/Interface/ {print " - " $2}')
     if [ -z "$iwlist_out" ]; then
@@ -264,6 +292,7 @@ function stop_mitmproxy() {
 
 while true; do
     banner
+    echo -e "${BLUE}0) Install/check dependencies${NC}"
     echo -e "${BLUE}1) Scan WiFi interfaces & networks${NC}"
     echo -e "${BLUE}2) Start Rogue AP (Evil Twin)${NC}"
     echo -e "${BLUE}3) Deauth client(s) from real AP${NC}"
@@ -277,8 +306,9 @@ while true; do
     fi
     echo -e "${BLUE}8) SAFE TEARDOWN/RESET${NC}"
     echo -e "${BLUE}9) Exit${NC}"
-    echo -ne "${CYAN}Your choice [1-9]: ${NC}"; read CHOICE
+    echo -ne "${CYAN}Your choice [0-9]: ${NC}"; read CHOICE
     case $CHOICE in
+        0) install_deps ;;
         1) scan_wifi_interfaces_and_networks ;;
         2) start_rogue_ap ;;
         3) deauth_attack ;;
