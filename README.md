@@ -23,11 +23,14 @@ Automate Evil Twin/Rogue APs, deauth attacks, WPA handshake capture, and credent
 
 ## Dependencies
 
-- **Linux** (Debian/Ubuntu recommended)
-- `hostapd`, `dnsmasq`, `iw`, `aircrack-ng` (`iw`, `airodump-ng`, `aireplay-ng`)
-- WiFi card supporting monitor and AP mode (Atheros/Qualcomm, Mediatek, some Realtek etc)
-- `python3`, `openssl` (for self-signed HTTPS certs)
-- Run as **root** (`sudo ./wifi_threat_sim.sh`)
+- Linux (Debian/Ubuntu/Kali, Fedora, Arch, ...)
+- Essential tools: hostapd, dnsmasq, iw, aircrack-ng, python3, openssl, mitmproxy
+- USB WiFi card supporting monitor + AP mode (see below)
+
+**You can now check and install all required dependencies using the built-in installer:  
+Simply run the tool and choose `0) Install/check dependencies` from the main menu.**
+
+The installer supports apt (Debian/Ubuntu/Kali), dnf or yum (Fedora/CentOS), pacman (Arch).
 
 ---
 
@@ -43,13 +46,17 @@ Automate Evil Twin/Rogue APs, deauth attacks, WPA handshake capture, and credent
     sudo ./wifi_threat_sim.sh
     ```
 4. Follow the menu options:
-    - Scan WiFi interfaces and networks
+
+    - Install/check dependencies
+    - Scan WiFi interfaces & networks
     - Start Rogue AP (Evil Twin)
-    - Deauth clients from real AP
-    - Capture WPA handshake
-    - Select captive portal skin (pick your phishing page look)
-    - Launch captive portal (choose HTTP or HTTPS mode)
-    - Teardown/Reset (restore networking)
+    - Deauth client(s) from real AP
+    - Capture WPA Handshake
+    - Choose phishing portal skin
+    - Launch Captive Phishing Portal
+    - Launch MITMProxy (sniff/intercept)
+    - SAFE TEARDOWN/RESET
+    - Exit
 
 5. Review creds in `phishing_portal/captured_creds.txt`, stats in `phishing_portal/stats.log`, and handshake .cap files in `logs/`.
 
