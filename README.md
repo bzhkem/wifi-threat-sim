@@ -39,11 +39,11 @@ The installer supports apt (Debian/Ubuntu/Kali), dnf or yum (Fedora/CentOS), pac
 1. **Clone this repo or copy all files** to your lab machine.
 2. Make the main script executable:
     ```bash
-    chmod +x opt/wifi_threat_sim/wifi_threat_sim.sh
+    chmod +x opt/wifi-threat-sim-main/wifi_threat_sim.sh
     ```
 3. Run the tool:
     ```bash
-    sudo opt/wifi_threat_sim/wifi_threat_sim.sh
+    sudo opt/wifi-threat-sim-main/wifi_threat_sim.sh
     ```
 4. Follow the menu options:
 
