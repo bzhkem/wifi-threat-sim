@@ -9,12 +9,13 @@ NC='\033[0m'
 
 set -e
 
-AP_CONF="configs/hostapd.conf"
-DNS_CONF="configs/dnsmasq.conf"
-PHISH_PORTAL="phishing_portal"
+BASE="/opt/wifi-threat-simulator"
+AP_CONF="$BASE/configs/hostapd.conf"
+DNS_CONF="$BASE/configs/dnsmasq.conf"
+PHISH_PORTAL="$BASE/phishing_portal"
 SKINS_DIR="$PHISH_PORTAL/skins"
-LOGDIR="logs"
-MITM_LOG="logs/mitmproxy.log"
+LOGDIR="$BASE/logs"
+MITM_LOG="$LOGDIR/mitmproxy.log"
 MITMSTATE="off"
 [ -d "$LOGDIR" ] || mkdir -p "$LOGDIR"
 [ -d "$SKINS_DIR" ] || mkdir -p "$SKINS_DIR"
@@ -126,7 +127,7 @@ function scan_wifi_interfaces_and_networks() {
 }
 
 function gen_configs() {
-    mkdir -p configs
+    mkdir -p $(dirname "$AP_CONF")
     cat > "$AP_CONF" <<EOF
 interface=$IFACE
 driver=nl80211
@@ -252,7 +253,7 @@ function phishing_portal() {
     REDIRECT="${SKIN_TO_REDIRECT[$SKINBN]}"
     [ -z "$REDIRECT" ] && REDIRECT="https://apple.com/"
     read -p "Launch portal as HTTP (port 80) or HTTPS (port 443)? [http/https]: " proto
-    cd phishing_portal
+    cd "$PHISH_PORTAL"
     if [[ "$proto" =~ ^[Hh][Tt][Tt][Pp][Ss]$ ]]; then
         sudo python3 server.py --https --redirect "$REDIRECT" &
         echo -e "${GREEN}[+] Captive portal running on HTTPS (https://10.0.0.1, redirect $REDIRECT)${NC}"
@@ -260,9 +261,9 @@ function phishing_portal() {
         sudo python3 server.py --redirect "$REDIRECT" &
         echo -e "${GREEN}[+] Captive portal running on HTTP (http://10.0.0.1, redirect $REDIRECT)${NC}"
     fi
-    cd ..
+    cd "$BASE"
     read -p "Press Enter to kill captive portal and return to menu..."
-    pkill -f "python3 server.py"
+    pkill -f "python3 $PHISH_PORTAL/server.py"
 }
 
 function start_mitmproxy() {
