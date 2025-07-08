@@ -39,11 +39,11 @@ The installer supports apt (Debian/Ubuntu/Kali), dnf or yum (Fedora/CentOS), pac
 1. **Clone this repo or copy all files** to your lab machine.
 2. Make the main script executable:
     ```bash
-    chmod +x wifi_threat_sim.sh
+    chmod +x opt/wifi_threat_sim/wifi_threat_sim.sh
     ```
 3. Run the tool:
     ```bash
-    sudo ./wifi_threat_sim.sh
+    sudo opt/wifi_threat_sim/wifi_threat_sim.sh
     ```
 4. Follow the menu options:
 
@@ -58,7 +58,7 @@ The installer supports apt (Debian/Ubuntu/Kali), dnf or yum (Fedora/CentOS), pac
     - SAFE TEARDOWN/RESET
     - Exit
 
-5. Review creds in `phishing_portal/captured_creds.txt`, stats in `phishing_portal/stats.log`, and handshake .cap files in `logs/`.
+5. Review creds in `opt/wifi_threat_sim/phishing_portal/captured_creds.txt`, stats in `phishing_portal/stats.log`, and handshake .cap files in `logs/`.
 
 ---
 
