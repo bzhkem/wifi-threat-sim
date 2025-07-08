@@ -34,6 +34,10 @@ function check_cmd() {
     command -v "$1" >/dev/null 2>&1 || { echo -e "${RED}[!] Missing required tool: $1${NC}"; exit 1; }
 }
 
+function stop_pyserver() {
+    sudo pkill -f "$PHISH_PORTAL/server.py" && echo -e "${GREEN}[✓] Captive phishing server stopped.${NC}"
+}
+
 function install_deps() {
     PKGS=(hostapd dnsmasq iw aircrack-ng python3 openssl mitmproxy)
     MISSING=()
@@ -298,14 +302,15 @@ while true; do
     echo -e "${BLUE}4) Capture WPA Handshake${NC}"
     echo -e "${BLUE}5) Choose phishing portal skin${NC}"
     echo -e "${BLUE}6) Launch Captive Phishing Portal${NC}"
+    echo -e "${BLUE}7) Stop Captive Phishing Portal (if running)${NC}"
     if [ "$MITMSTATE" = "on" ]; then
-        echo -e "${YELLOW}7) Stop MITMProxy + logs${NC}"
+        echo -e "${YELLOW}8) Stop MITMProxy + logs${NC}"
     else
-        echo -e "${BLUE}7) Launch MITMProxy (sniff/intercept)${NC}"
+        echo -e "${BLUE}8) Launch MITMProxy (sniff/intercept)${NC}"
     fi
-    echo -e "${BLUE}8) SAFE TEARDOWN/RESET${NC}"
-    echo -e "${BLUE}9) Exit${NC}"
-    echo -ne "${CYAN}Your choice [0-9]: ${NC}"; read CHOICE
+    echo -e "${BLUE}9) SAFE TEARDOWN/RESET${NC}"
+    echo -e "${BLUE}10) Exit${NC}"
+    echo -ne "${CYAN}Your choice [0-10]: ${NC}"; read CHOICE
     case $CHOICE in
         0) install_deps ;;
         1) scan_wifi_interfaces_and_networks ;;
@@ -314,9 +319,10 @@ while true; do
         4) handshake_capture ;;
         5) select_portal_skin ;;
         6) phishing_portal ;;
-        7) if [ "$MITMSTATE" = "off" ]; then start_mitmproxy; else stop_mitmproxy; fi ;;
-        8) cleanup ;;
-        9) echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
+        7) stop_pyserver ;;
+        8) if [ "$MITMSTATE" = "off" ]; then start_mitmproxy; else stop_mitmproxy; fi ;;
+        9) cleanup ;;
+        10) echo -e "${GREEN}Bye!${NC}"; exit 0 ;;
         *) echo -e "${RED}[!] Invalid option.${NC}" ;;
     esac
     read -p "Press Enter to return to menu..."
