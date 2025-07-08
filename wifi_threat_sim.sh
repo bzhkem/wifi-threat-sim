@@ -9,7 +9,7 @@ NC='\033[0m'
 
 set -e
 
-BASE="/opt/wifi-threat-simulator"
+BASE="/opt/wifi-threat-sim-main"
 AP_CONF="$BASE/configs/hostapd.conf"
 DNS_CONF="$BASE/configs/dnsmasq.conf"
 PHISH_PORTAL="$BASE/phishing_portal"
