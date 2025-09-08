@@ -9,7 +9,7 @@ NC='\033[0m'
 
 set -e
 
-BASE="/opt/wifi-threat-sim-main"
+BASE="/opt/wifi-threat-sim"
 AP_CONF="$BASE/configs/hostapd.conf"
 DNS_CONF="$BASE/configs/dnsmasq.conf"
 PHISH_PORTAL="$BASE/phishing_portal"
@@ -89,8 +89,8 @@ function banner() {
     echo -e "${BLUE}"
     echo "  ___  _  _ ___ _  _ _      _        _       _       _         "
     echo " |_ _|| \\| | __| \\| | |    /_\\  _ _| |_ ___| |___  | |___ ___ "
-    echo "  | | | .\` | _|| .\` | |__ / _ \\| ' \\  _/ _ \\ / -_) | / -_|_-/"
-    echo " |___||_|\\_|___|_|\\_|____/_/ \\_||_|\\__\\___/_\\___| |_\\___/__|"
+    echo "  | | | .\` | _|| .\` | |__ / _ \\ | ' \\  _/ _ \\ / -_) | / -_|_-/"
+    echo " |___||_|\\_|___|_|\\_|____/_/ \\_\\||_|\\__\\___/_\\___| |_\\___/__|"
     echo -e "${CYAN}    Wi-Fi Threat Simulator - For Lab/Education only ${NC}\n"
     echo -e "${YELLOW}MITM Status: $MITMSTATE${NC}\n"
 }
