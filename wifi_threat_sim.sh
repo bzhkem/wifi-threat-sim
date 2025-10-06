@@ -91,13 +91,12 @@ function banner() {
     echo " |_ _|| \\| | __| \\| | |    /_\\  ||  \\   /     \\  "
     echo "  | | | .\` | _|| .\` | |__ / _ \\ ||  (  /       \\  "
     echo " |___||_|\\_|___|_|\\_|____/_/ \\_\\||__/ /_________\\"
-    echo -e "${CYAN}    Wi-Fi Threat Simulator - For Lab/Education only ${NC}
+    echo -e "${CYAN}    Wi-Fi Threat Simulator - For Lab/Education only ${NC}"
     echo -e "${YELLOW}MITM Status: $MITMSTATE${NC}\n"
 }
 
-
 function prompt_iface(){
-    iwlist_out=$(iw dev 2>/dev/null | awk '/Interface/ {print NR") " $2}')
+    iwlist_out=$(iw dev 2>/dev/null | awk '/Interface/ {print NR\") \" $2}')
     if [ -z "$iwlist_out" ]; then
         echo -e "${RED}[!] No wireless interface found. Aborting.${NC}"
         exit 1
@@ -132,7 +131,7 @@ function scan_wifi_interfaces_and_networks() {
 }
 
 function gen_configs() {
-    mkdir -p $(dirname "$AP_CONF")
+    mkdir -p "$(dirname "$AP_CONF")"
     cat > "$AP_CONF" <<EOF
 interface=$IFACE
 driver=nl80211
@@ -146,6 +145,7 @@ wpa_passphrase=$FAKEPASS
 wpa_key_mgmt=WPA-PSK
 rsn_pairwise=CCMP
 EOF
+    mkdir -p "$(dirname "$DNS_CONF")"
     cat > "$DNS_CONF" <<EOF
 interface=$IFACE
 dhcp-range=10.0.0.10,10.0.0.250,12h
@@ -258,7 +258,7 @@ function phishing_portal() {
     REDIRECT="${SKIN_TO_REDIRECT[$SKINBN]}"
     [ -z "$REDIRECT" ] && REDIRECT="https://apple.com/"
     read -p "Launch portal as HTTP (port 80) or HTTPS (port 443)? [http/https]: " proto
-    cd "$PHISH_PORTAL"
+    cd "$PHISH_PORTAL" || { echo -e "${RED}Phishing portal directory not found: $PHISH_PORTAL${NC}"; return; }
     if [[ "$proto" =~ ^[Hh][Tt][Tt][Pp][Ss]$ ]]; then
         sudo python3 server.py --https --redirect "$REDIRECT" &
         echo -e "${GREEN}[+] Captive portal running on HTTPS (https://10.0.0.1, redirect $REDIRECT)${NC}"
@@ -266,7 +266,7 @@ function phishing_portal() {
         sudo python3 server.py --redirect "$REDIRECT" &
         echo -e "${GREEN}[+] Captive portal running on HTTP (http://10.0.0.1, redirect $REDIRECT)${NC}"
     fi
-    cd "$BASE"
+    cd "$BASE" || true
     read -p "Press Enter to kill captive portal and return to menu..."
     pkill -f "python3 $PHISH_PORTAL/server.py"
 }
