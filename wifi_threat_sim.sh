@@ -87,13 +87,14 @@ trap cleanup EXIT
 function banner() {
     clear
     echo -e "${BLUE}"
-    echo "  ___  _  _ ___ _  _ _      _        _       _       _         "
-    echo " |_ _|| \\| | __| \\| | |    /_\\  _ _| |_ ___| |___  | |___ ___ "
-    echo "  | | | .\` | _|| .\` | |__ / _ \\ | ' \\  _/ _ \\ / -_) | / -_|_-/"
-    echo " |___||_|\\_|___|_|\\_|____/_/ \\_\\||_|\\__\\___/_\\___| |_\\___/__|"
-    echo -e "${CYAN}    Wi-Fi Threat Simulator - For Lab/Education only ${NC}\n"
+    echo "  ___  _  _ ___ _  _ _      _    _ _    \\     /  "
+    echo " |_ _|| \\| | __| \\| | |    /_\\  ||  \\   /     \\  "
+    echo "  | | | .\` | _|| .\` | |__ / _ \\ ||  (  /       \\  "
+    echo " |___||_|\\_|___|_|\\_|____/_/ \\_\\||__/ /_________\\"
+    echo -e "${CYAN}    Wi-Fi Threat Simulator - For Lab/Education only ${NC}
     echo -e "${YELLOW}MITM Status: $MITMSTATE${NC}\n"
 }
+
 
 function prompt_iface(){
     iwlist_out=$(iw dev 2>/dev/null | awk '/Interface/ {print NR") " $2}')
